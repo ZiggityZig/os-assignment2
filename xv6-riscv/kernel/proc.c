@@ -5,6 +5,8 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include <stdbool.h>
+
 
 int UNUSED_list_head;
 int SLEEPING_list_head;
@@ -45,36 +47,52 @@ void List_insert(struct proc *current_proc_list, int key_to_add)
   release(&current_proc_list->lock);
 }
 
-void List_remove(struct proc *current_proc_list_head, int key_to_remove)
+bool List_remove(struct proc *list_head, int proc_index_to_remove)
 {
-  struct proc *link_to_remove;
-  struct proc *previous;
-  int flag = 5;
-  int next_link_pid;
-
-  link_to_remove = current_proc_list_head;
-  while (link_to_remove->pid != key_to_remove)
-  {
-    previous = link_to_remove;
-    link_to_remove = &proc[current_proc_list_head->next_pid];
+  /* lock sentinel node */
+  struct proc *prev = list_head;
+  acquire(&prev->lock);
+  if (prev->next_pid == 0)
+  { /* the list is empty */
+    release(&prev->lock);
+    return false;
   }
 
-  acquire(&previous->lock);
-  flag = link_to_remove->next_pid;
-  next_link_pid = link_to_remove->next_pid;
+  struct proc *elem = &proc[prev->next_pid];
+  acquire(&elem->lock);
 
-  if (flag != 0) // i assume that the "next_pid" field of the last element equals zero
+  while (1)
   {
-    acquire(&proc[next_link_pid]);
+    if (elem->pid == proc_index_to_remove)
+    {
+      /* if found, assign prev next to elem next */
+      prev->next_pid = elem->next_pid;
+
+      /* unlock and deallocate mem */
+      release(&elem->lock);
+      freeproc(elem);
+
+      /* success */
+      release(&prev->lock);
+      return true;
+    }
+    release(&prev->lock);
+    prev = elem;
+    int next_proc = elem->next_pid;
+    if (next_proc==0) // the element is not in the list
+    {
+      return false;
+    }
+    elem = &proc[next_proc];
+    acquire(&elem->lock);
   }
-  previous->next_pid = link_to_remove->next_pid;
-  freeproc(link_to_remove);
-  release(&previous->lock);
-  if (flag != 0)
-  {
-    release(&proc[next_link_pid]);
-  }
+
+  /* we did not find it; unlock and report failure */
+  release(&elem->lock);
+  release(&prev->lock);
+  return false;
 }
+
 //-----------------------------------------------------------------------------
 
 // Allocate a page for each process's kernel stack.
