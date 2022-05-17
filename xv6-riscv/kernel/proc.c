@@ -99,6 +99,9 @@ int set_CPU(int cpu_num)
   int index_of_process_to_add = p->pid;
   struct proc *list_head_of_cpu = &proc[c->list_head_pid]; // the list of processes to run in this cpu
   List_insert(list_head_of_cpu, index_of_process_to_add);
+
+  struct proc *list_to_remove_from = &proc[mycpu()->list_head_pid];
+  List_remove(list_to_remove_from , index_of_process_to_add);
 }
 
 //-----------------------------------------------------------------------------
