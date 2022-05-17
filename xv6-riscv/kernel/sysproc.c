@@ -95,3 +95,12 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+
+uint64
+sys_set_cpu(void)
+{
+// from here you can call other function in the kernal from proc.c or trap.c and many others places
+
+return 0;
+}

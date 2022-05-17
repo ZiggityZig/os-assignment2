@@ -94,6 +94,7 @@ struct proc {
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
   int next_pid;                // pointer to the next procces, i added
+  int num_of_CPU;              // number of CPU the process affiliated with
 
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process

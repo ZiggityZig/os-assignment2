@@ -7,7 +7,6 @@
 #include "defs.h"
 #include <stdbool.h>
 
-
 int UNUSED_list_head;
 int SLEEPING_list_head;
 int ZOMBIE_list_head;
@@ -79,7 +78,7 @@ bool List_remove(struct proc *list_head, int proc_index_to_remove)
     release(&prev->lock);
     prev = elem;
     int next_proc = elem->next_pid;
-    if (next_proc==0) // the element is not in the list
+    if (next_proc == 0) // the element is not in the list
     {
       return false;
     }
@@ -91,6 +90,15 @@ bool List_remove(struct proc *list_head, int proc_index_to_remove)
   release(&elem->lock);
   release(&prev->lock);
   return false;
+}
+
+int set_CPU(int cpu_num)
+{
+  struct cpu *c = &cpus[cpu_num]; // 'c' is the cpu we want to handle the current process
+  struct proc *p = myproc();      // 'p' is the current process
+  int index_of_process_to_add = p->pid;
+  struct proc *list_head_of_cpu = &proc[c->list_head_pid]; // the list of processes to run in this cpu
+  List_insert(list_head_of_cpu, index_of_process_to_add);
 }
 
 //-----------------------------------------------------------------------------
@@ -239,6 +247,8 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->next_pid = 0;
+  p->num_of_CPU = 0;
 }
 
 // Create a user page table for a given process,
