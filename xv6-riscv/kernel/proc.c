@@ -101,7 +101,12 @@ int set_CPU(int cpu_num)
   List_insert(list_head_of_cpu, index_of_process_to_add);
 
   struct proc *list_to_remove_from = &proc[mycpu()->list_head_pid];
-  List_remove(list_to_remove_from , index_of_process_to_add);
+  List_remove(list_to_remove_from, index_of_process_to_add);
+}
+
+int get_CPU() {
+  
+
 }
 
 //-----------------------------------------------------------------------------
