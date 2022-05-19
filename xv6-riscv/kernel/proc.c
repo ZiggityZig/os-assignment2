@@ -135,7 +135,7 @@ void procinit(void)
   {
     initlock(&p->lock, "proc");
     p->kstack = KSTACK((int)(p - proc));
-  
+    List_insert(&proc[UNUSED_list_head], p->pid); //---------------i added
   }
 }
 
@@ -187,7 +187,25 @@ static struct proc *
 allocproc(void)
 {
   struct proc *p;
+  //----------------------------------
+  p = &proc[UNUSED_list_head];
+  while (p->pid > 0)
+  {
+    acquire(&p->lock);
+    if (p->state == UNUSED)
+    {
+      goto found;
+    }
+    else
+    {
+      release(&p->lock);
+    }
+    p = &proc[p->next_pid];
+  }
+  return 0;
+  //----------------------------------
 
+/*
   for (p = proc; p < &proc[NPROC]; p++)
   {
     acquire(&p->lock);
@@ -201,7 +219,7 @@ allocproc(void)
     }
   }
   return 0;
-
+*/
 found:
   p->pid = allocpid();
   p->state = USED;
@@ -636,9 +654,13 @@ void sched(void)
 // Give up the CPU for one scheduling round.
 void yield(void)
 {
+  struct cpu *c = mycpu();
+
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
+  List_insert(&proc[c->RUNNABLE_list_head_pid], p->pid);
+
   sched();
   release(&p->lock);
 }
