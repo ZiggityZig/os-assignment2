@@ -35,14 +35,15 @@ extern uint64 cas(volatile void *addr, int expected, int newval);
 
 //-----------------------------------------------------------------------------
 // adding the new elment to the head of the list
+// TO DO: Insert the new element at the end of the list (and not at the beginning as now)
 void List_insert(struct proc *current_proc_list, int key_to_add)
 {
   struct proc *p;
   acquire(&current_proc_list->lock);
-  // acquire(&proc[key_to_add]);
   p = &proc[key_to_add];
+  acquire(&p->lock);
   p->next_pid = current_proc_list->pid;
-  // release(&proc[key_to_add]);
+  release(&p->lock);
   release(&current_proc_list->lock);
 }
 
@@ -97,16 +98,11 @@ int set_CPU(int cpu_num)
   struct cpu *c = &cpus[cpu_num]; // 'c' is the cpu we want to handle the current process
   struct proc *p = myproc();      // 'p' is the current process
   int index_of_process_to_add = p->pid;
-  struct proc *list_head_of_cpu = &proc[c->list_head_pid]; // the list of processes to run in this cpu
+  struct proc *list_head_of_cpu = &proc[c->RUNNABLE_list_head_pid]; // the list of processes to run in this cpu
   List_insert(list_head_of_cpu, index_of_process_to_add);
 
-  struct proc *list_to_remove_from = &proc[mycpu()->list_head_pid];
+  struct proc *list_to_remove_from = &proc[mycpu()->RUNNABLE_list_head_pid];
   List_remove(list_to_remove_from, index_of_process_to_add);
-}
-
-int get_CPU() {
-  
-
 }
 
 //-----------------------------------------------------------------------------
@@ -139,6 +135,7 @@ void procinit(void)
   {
     initlock(&p->lock, "proc");
     p->kstack = KSTACK((int)(p - proc));
+  
   }
 }
 
@@ -257,6 +254,10 @@ freeproc(struct proc *p)
   p->state = UNUSED;
   p->next_pid = 0;
   p->num_of_CPU = 0;
+  //------------------------- i added--------------
+  List_remove(&proc[ZOMBIE_list_head], p->pid);
+  List_insert(&proc[UNUSED_list_head], p->pid);
+  //-----------------------------------------------
 }
 
 // Create a user page table for a given process,
@@ -321,6 +322,7 @@ void userinit(void)
 
   p = allocproc();
   initproc = p;
+  struct cpu *c = mycpu();
 
   // allocate one user page and copy init's instructions
   // and data into it.
@@ -337,6 +339,7 @@ void userinit(void)
   p->state = RUNNABLE;
 
   release(&p->lock);
+  List_insert(&proc[c->RUNNABLE_list_head_pid], p->pid); // admit the init process to the firxt CPU's list
 }
 
 // Grow or shrink user memory by n bytes.
@@ -367,8 +370,9 @@ int growproc(int n)
 int fork(void)
 {
   int i, pid;
-  struct proc *np;
+  struct proc *np; // new process
   struct proc *p = myproc();
+  struct cpu *father_current_CPU = mycpu(); // father's CPU
 
   // Allocate process.
   if ((np = allocproc()) == 0)
@@ -410,7 +414,11 @@ int fork(void)
   acquire(&np->lock);
   np->state = RUNNABLE;
   release(&np->lock);
-
+  //-----i added-----
+  acquire(&np->lock);
+  List_insert(&proc[father_current_CPU->RUNNABLE_list_head_pid], np->pid); // admit the new process to the father's current CPU's ready list
+  release(&np->lock);
+  //-----until here---
   return pid;
 }
 
@@ -468,7 +476,9 @@ void exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
-
+  //---i added
+  List_insert(&proc[ZOMBIE_list_head], p->pid);
+  //----------
   release(&wait_lock);
 
   // Jump into the scheduler, never to return.
@@ -540,6 +550,7 @@ int wait(uint64 addr)
 void scheduler(void)
 {
   struct proc *p;
+  struct proc *loop_var;
   struct cpu *c = mycpu();
 
   c->proc = 0;
@@ -547,9 +558,10 @@ void scheduler(void)
   {
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
-
-    for (p = proc; p < &proc[NPROC]; p++)
+    loop_var = &proc[c->RUNNABLE_list_head_pid];
+    while (loop_var->pid > 0) // i changed the loop to iterate over CPU's list
     {
+      p = &proc[c->RUNNABLE_list_head_pid];
       acquire(&p->lock);
       if (p->state == RUNNABLE)
       {
@@ -558,6 +570,9 @@ void scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+
+        List_remove(&proc[c->RUNNABLE_list_head_pid], p->pid);
+
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
@@ -565,7 +580,30 @@ void scheduler(void)
         c->proc = 0;
       }
       release(&p->lock);
+      loop_var = &proc[loop_var->next_pid];
     }
+    /*
+     //-------------------------------------------------
+     for (p = proc; p < &proc[NPROC]; p++)
+     {
+       acquire(&p->lock);
+       if (p->state == RUNNABLE)
+       {
+         // Switch to chosen process.  It is the process's job
+         // to release its lock and then reacquire it
+         // before jumping back to us.
+         p->state = RUNNING;
+         c->proc = p;
+         swtch(&c->context, &p->context);
+
+         // Process is done running for now.
+         // It should have changed its p->state before coming back.
+         c->proc = 0;
+       }
+       release(&p->lock);
+     }
+     //-------------------------------------------------
+     */
   }
 }
 
@@ -645,6 +683,9 @@ void sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
+  //----i added----------------------------------
+  List_insert(&proc[SLEEPING_list_head], p->pid);
+  //---------------------------------------------
 
   sched();
 
@@ -661,19 +702,39 @@ void sleep(void *chan, struct spinlock *lk)
 void wakeup(void *chan)
 {
   struct proc *p;
+  struct cpu *c = mycpu();
 
-  for (p = proc; p < &proc[NPROC]; p++)
+  struct proc *loop_var;
+  loop_var = &proc[SLEEPING_list_head];
+  while (loop_var->pid > 0)
   {
-    if (p != myproc())
+    if (loop_var != myproc())
     {
-      acquire(&p->lock);
-      if (p->state == SLEEPING && p->chan == chan)
+      acquire(&loop_var->lock);
+      if (loop_var->state == SLEEPING && loop_var->chan == chan)
       {
-        p->state = RUNNABLE;
+        loop_var->state = RUNNABLE;
       }
-      release(&p->lock);
+      release(&loop_var->lock);
+      List_remove(&proc[SLEEPING_list_head], loop_var->pid);
+      List_insert(&proc[c->RUNNABLE_list_head_pid], loop_var->pid);
+      loop_var = &proc[loop_var->next_pid];
     }
   }
+  /*
+    for (p = proc; p < &proc[NPROC]; p++)
+    {
+      if (p != myproc())
+      {
+        acquire(&p->lock);
+        if (p->state == SLEEPING && p->chan == chan)
+        {
+          p->state = RUNNABLE;
+        }
+        release(&p->lock);
+      }
+    }
+    */
 }
 
 // Kill the process with the given pid.
