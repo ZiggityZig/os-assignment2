@@ -455,7 +455,10 @@ int fork(void)
   }
   acquire(&np->lock);
   List_insert(&proc[min_admittion_cpu->RUNNABLE_list_head_pid], np->pid); // admit the new process to the father's current CPU's ready list
-  min_admittion_cpu->admitted_counter++;
+  uint64 old;
+  do {
+    old = min_admittion_cpu->admitted_counter;
+  } while(cas(&min_admittion_cpu->admitted_counter, old, old +1));
   release(&np->lock);
   //-----until here---
   return pid;
@@ -769,7 +772,10 @@ void wakeup(void *chan)
       }
       List_remove(&proc[SLEEPING_list_head], loop_var->pid);
       List_insert(&proc[min_admittion_cpu->RUNNABLE_list_head_pid], loop_var->pid);
-      min_admittion_cpu->admitted_counter++;
+      uint64 old;
+      do {
+        old = min_admittion_cpu->admitted_counter;
+      } while(cas(&min_admittion_cpu->admitted_counter, old, old +1));
       loop_var = &proc[loop_var->next_pid];
     }
   }
