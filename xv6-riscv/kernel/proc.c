@@ -7,6 +7,8 @@
 #include "defs.h"
 #include <stdbool.h>
 
+MAX_UINT64 = 18446744073709551615;
+
 int UNUSED_list_head;
 int SLEEPING_list_head;
 int ZOMBIE_list_head;
@@ -400,7 +402,6 @@ int fork(void)
   int i, pid;
   struct proc *np; // new process
   struct proc *p = myproc();
-  struct cpu *father_current_CPU = mycpu(); // father's CPU
 
   // Allocate process.
   if ((np = allocproc()) == 0)
@@ -443,8 +444,18 @@ int fork(void)
   np->state = RUNNABLE;
   release(&np->lock);
   //-----i added-----
+  struct cpu *min_admittion_cpu;
+  struct cpu *current_cpu;
+  uint64 min_admittion = MAX_UINT64;
+  for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++) {
+    if (current_cpu->admitted_counter < min_admittion){
+      min_admittion = current_cpu->admitted_counter;
+      min_admittion_cpu = current_cpu;
+    }
+  }
   acquire(&np->lock);
-  List_insert(&proc[father_current_CPU->RUNNABLE_list_head_pid], np->pid); // admit the new process to the father's current CPU's ready list
+  List_insert(&proc[min_admittion_cpu->RUNNABLE_list_head_pid], np->pid); // admit the new process to the father's current CPU's ready list
+  min_admittion_cpu->admitted_counter++;
   release(&np->lock);
   //-----until here---
   return pid;
@@ -734,7 +745,6 @@ void sleep(void *chan, struct spinlock *lk)
 void wakeup(void *chan)
 {
   struct proc *p;
-  struct cpu *c = mycpu();
 
   struct proc *loop_var;
   loop_var = &proc[SLEEPING_list_head];
@@ -748,8 +758,18 @@ void wakeup(void *chan)
         loop_var->state = RUNNABLE;
       }
       release(&loop_var->lock);
+      struct cpu *min_admittion_cpu;
+      struct cpu *current_cpu;
+      uint64 min_admittion = MAX_UINT64;
+      for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++) {
+        if (current_cpu->admitted_counter < min_admittion){
+          min_admittion = current_cpu->admitted_counter;
+          min_admittion_cpu = current_cpu;
+        }
+      }
       List_remove(&proc[SLEEPING_list_head], loop_var->pid);
-      List_insert(&proc[c->RUNNABLE_list_head_pid], loop_var->pid);
+      List_insert(&proc[min_admittion_cpu->RUNNABLE_list_head_pid], loop_var->pid);
+      min_admittion_cpu->admitted_counter++;
       loop_var = &proc[loop_var->next_pid];
     }
   }
