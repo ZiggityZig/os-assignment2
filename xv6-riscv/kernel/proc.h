@@ -25,6 +25,7 @@ struct cpu {
   int noff;                     // Depth of push_off() nesting.
   int intena;                   // Were interrupts enabled before push_off()?
   int RUNNABLE_list_head_pid;   // ready list, the head of this spessific CPU ****RUNNABLE**** list, i added
+  uint64 admitted_counter;
 };
 
 extern struct cpu cpus[NCPU];
