@@ -119,3 +119,17 @@ sys_get_cpu(void)
     return ans;
   }
 }
+
+uint64
+sys_cpu_process_count(void)
+{
+  int ans = cpuid();
+  if (ans < 0)
+  {
+    return -1;
+  }
+  else
+  {
+    return ans;
+  }
+}
