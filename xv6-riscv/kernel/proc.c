@@ -34,15 +34,25 @@ struct spinlock wait_lock;
 extern uint64 cas(volatile void *addr, int expected, int newval);
 
 //-----------------------------------------------------------------------------
-// adding the new elment to the head of the list
-// TO DO: Insert the new element at the end of the list (and not at the beginning as now)
+// adding the new elment to the tail of the list
 void List_insert(struct proc *current_proc_list, int key_to_add)
 {
+
   struct proc *p;
   acquire(&current_proc_list->lock);
   p = &proc[key_to_add];
   acquire(&p->lock);
-  p->next_pid = current_proc_list->pid;
+  if (&current_proc_list->next_pid == 0){
+    current_proc_list->next_pid = p->pid;
+  } else {;
+    struct proc *current_proc = current_proc_list;
+    while (current_proc->next_pid != 0) {
+      current_proc = &proc[current_proc->pid];
+    }
+    acquire(&current_proc->lock);
+    current_proc->next_pid = p->pid;
+    release(&current_proc->lock);
+  }
   release(&p->lock);
   release(&current_proc_list->lock);
 }
