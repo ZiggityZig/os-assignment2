@@ -7,7 +7,7 @@
 #include "defs.h"
 #include <stdbool.h>
 
-uint64 MAX_UINT64 = 9446744073709551615;
+uint64 MAX_UINT64 = 94467440737095515;
 
 int UNUSED_list_head;
 int SLEEPING_list_head;
@@ -47,10 +47,14 @@ void List_insert(struct proc *current_proc_list, int key_to_add)
   if (&current_proc_list->next_pid == 0)
   {
     current_proc_list->next_pid = p->pid;
+<<<<<<< HEAD
   }
   else
   {
     ;
+=======
+  } else {
+>>>>>>> 412aeb31b750644a69c750e1b0b3ff4b83cd2ce4
     struct proc *current_proc = current_proc_list;
     while (current_proc->next_pid != 0)
     {
@@ -117,17 +121,17 @@ bool List_remove(struct proc *list_head, int proc_index_to_remove)
   */
 }
 
-int set_CPU(int cpu_num)
-{
-  struct cpu *c = &cpus[cpu_num]; // 'c' is the cpu we want to handle the current process
-  struct proc *p = myproc();      // 'p' is the current process
-  int index_of_process_to_add = p->pid;
-  struct proc *list_head_of_cpu = &proc[c->RUNNABLE_list_head_pid]; // the list of processes to run in this cpu
-  List_insert(list_head_of_cpu, index_of_process_to_add);
+// int set_CPU(int cpu_num)
+// {
+//   struct cpu *c = &cpus[cpu_num]; // 'c' is the cpu we want to handle the current process
+//   struct proc *p = myproc();      // 'p' is the current process
+//   int index_of_process_to_add = p->pid;
+//   struct proc *list_head_of_cpu = &proc[c->RUNNABLE_list_head_pid]; // the list of processes to run in this cpu
+//   List_insert(list_head_of_cpu, index_of_process_to_add);
 
-  struct proc *list_to_remove_from = &proc[mycpu()->RUNNABLE_list_head_pid];
-  List_remove(list_to_remove_from, index_of_process_to_add);
-}
+//   struct proc *list_to_remove_from = &proc[mycpu()->RUNNABLE_list_head_pid];
+//   List_remove(list_to_remove_from, index_of_process_to_add);
+// }
 
 //-----------------------------------------------------------------------------
 
