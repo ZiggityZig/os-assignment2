@@ -747,8 +747,6 @@ void sleep(void *chan, struct spinlock *lk)
 // Must be called without any p->lock.
 void wakeup(void *chan)
 {
-  struct proc *p;
-
   struct proc *loop_var;
   loop_var = &proc[SLEEPING_list_head];
   while (loop_var->pid > 0)
