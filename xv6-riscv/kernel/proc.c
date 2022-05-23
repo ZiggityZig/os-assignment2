@@ -7,7 +7,7 @@
 #include "defs.h"
 #include <stdbool.h>
 
-MAX_UINT64 = 18446744073709551615;
+uint64 MAX_UINT64 = 9446744073709551615;
 
 int UNUSED_list_head;
 int SLEEPING_list_head;
@@ -444,7 +444,7 @@ int fork(void)
   np->state = RUNNABLE;
   release(&np->lock);
   //-----i added-----
-  struct cpu *min_admittion_cpu;
+  struct cpu *min_admittion_cpu = cpus[0];
   struct cpu *current_cpu;
   uint64 min_admittion = MAX_UINT64;
   for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++) {
@@ -761,7 +761,7 @@ void wakeup(void *chan)
         loop_var->state = RUNNABLE;
       }
       release(&loop_var->lock);
-      struct cpu *min_admittion_cpu;
+      struct cpu *min_admittion_cpu = cpus[0];
       struct cpu *current_cpu;
       uint64 min_admittion = MAX_UINT64;
       for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++) {
