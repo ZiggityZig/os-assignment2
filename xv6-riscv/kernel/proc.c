@@ -44,11 +44,16 @@ void List_insert(struct proc *current_proc_list, int key_to_add)
   acquire(&current_proc_list->lock);
   p = &proc[key_to_add];
   acquire(&p->lock);
-  if (&current_proc_list->next_pid == 0){
+  if (&current_proc_list->next_pid == 0)
+  {
     current_proc_list->next_pid = p->pid;
-  } else {;
+  }
+  else
+  {
+    ;
     struct proc *current_proc = current_proc_list;
-    while (current_proc->next_pid != 0) {
+    while (current_proc->next_pid != 0)
+    {
       current_proc = &proc[current_proc->pid];
     }
     acquire(&current_proc->lock);
@@ -64,10 +69,12 @@ bool List_remove(struct proc *list_head, int proc_index_to_remove)
   /* lock sentinel node */
   struct proc *prev = list_head;
   acquire(&prev->lock);
+
   if (prev->next_pid == 0)
   { /* the list is empty */
+    freeproc(prev);
     release(&prev->lock);
-    return false;
+    return true;
   }
 
   struct proc *elem = &proc[prev->next_pid];
@@ -80,29 +87,34 @@ bool List_remove(struct proc *list_head, int proc_index_to_remove)
       /* if found, assign prev next to elem next */
       prev->next_pid = elem->next_pid;
 
-      /* unlock and deallocate mem */
-      release(&elem->lock);
+      /* unlock */
       freeproc(elem);
+      release(&elem->lock);
 
       /* success */
       release(&prev->lock);
       return true;
     }
-    release(&prev->lock);
+    release(&prev->lock); // i am still holding the "elem" lock
     prev = elem;
     int next_proc = elem->next_pid;
     if (next_proc == 0) // the element is not in the list
     {
       return false;
+      release(&elem->lock);
     }
+    release(&elem->lock);
     elem = &proc[next_proc];
+    acquire(&prev->lock);
     acquire(&elem->lock);
   }
 
-  /* we did not find it; unlock and report failure */
+  /*
+  we did not find it; unlock and report failure
   release(&elem->lock);
   release(&prev->lock);
   return false;
+  */
 }
 
 int set_CPU(int cpu_num)
@@ -285,8 +297,10 @@ freeproc(struct proc *p)
   p->next_pid = 0;
   p->num_of_CPU = 0;
   //------------------------- i added--------------
+  release(&p->lock);
   List_remove(&proc[ZOMBIE_list_head], p->pid);
   List_insert(&proc[UNUSED_list_head], p->pid);
+  acquire(&p->lock);
   //-----------------------------------------------
 }
 
@@ -444,11 +458,13 @@ int fork(void)
   np->state = RUNNABLE;
   release(&np->lock);
   //-----i added-----
-  struct cpu *min_admittion_cpu = cpus[0];
+  struct cpu *min_admittion_cpu = &cpus[0];
   struct cpu *current_cpu;
   uint64 min_admittion = MAX_UINT64;
-  for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++) {
-    if (current_cpu->admitted_counter < min_admittion){
+  for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++)
+  {
+    if (current_cpu->admitted_counter < min_admittion)
+    {
       min_admittion = current_cpu->admitted_counter;
       min_admittion_cpu = current_cpu;
     }
@@ -456,9 +472,10 @@ int fork(void)
   acquire(&np->lock);
   List_insert(&proc[min_admittion_cpu->RUNNABLE_list_head_pid], np->pid); // admit the new process to the father's current CPU's ready list
   uint64 old;
-  do {
+  do
+  {
     old = min_admittion_cpu->admitted_counter;
-  } while(cas(&min_admittion_cpu->admitted_counter, old, old +1));
+  } while (cas(&min_admittion_cpu->admitted_counter, old, old + 1));
   release(&np->lock);
   //-----until here---
   return pid;
@@ -729,10 +746,11 @@ void sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
+  release(&p->lock); //------i added
   //----i added----------------------------------
   List_insert(&proc[SLEEPING_list_head], p->pid);
   //---------------------------------------------
-
+  acquire(&p->lock);//------i added
   sched();
 
   // Tidy up.
@@ -759,11 +777,13 @@ void wakeup(void *chan)
         loop_var->state = RUNNABLE;
       }
       release(&loop_var->lock);
-      struct cpu *min_admittion_cpu = cpus[0];
+      struct cpu *min_admittion_cpu = &cpus[0];
       struct cpu *current_cpu;
       uint64 min_admittion = MAX_UINT64;
-      for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++) {
-        if (current_cpu->admitted_counter < min_admittion){
+      for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++)
+      {
+        if (current_cpu->admitted_counter < min_admittion)
+        {
           min_admittion = current_cpu->admitted_counter;
           min_admittion_cpu = current_cpu;
         }
@@ -771,9 +791,10 @@ void wakeup(void *chan)
       List_remove(&proc[SLEEPING_list_head], loop_var->pid);
       List_insert(&proc[min_admittion_cpu->RUNNABLE_list_head_pid], loop_var->pid);
       uint64 old;
-      do {
+      do
+      {
         old = min_admittion_cpu->admitted_counter;
-      } while(cas(&min_admittion_cpu->admitted_counter, old, old +1));
+      } while (cas(&min_admittion_cpu->admitted_counter, old, old + 1));
       loop_var = &proc[loop_var->next_pid];
     }
   }
@@ -819,7 +840,8 @@ int kill(int pid)
   return -1;
 }
 
-int cpu_process_count (int cpu_num) {
+int cpu_process_count(int cpu_num)
+{
   struct cpu *selected_cpu = &cpus[cpu_num];
   return selected_cpu->admitted_counter;
 }
