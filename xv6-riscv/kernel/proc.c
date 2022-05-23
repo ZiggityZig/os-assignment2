@@ -46,7 +46,7 @@ void List_insert(struct proc *current_proc_list, int key_to_add)
   acquire(&p->lock);
   if (&current_proc_list->next_pid == 0){
     current_proc_list->next_pid = p->pid;
-  } else {;
+  } else {
     struct proc *current_proc = current_proc_list;
     while (current_proc->next_pid != 0) {
       current_proc = &proc[current_proc->pid];
