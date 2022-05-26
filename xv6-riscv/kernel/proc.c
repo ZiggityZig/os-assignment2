@@ -42,6 +42,7 @@ extern uint64 cas(volatile void *addr, int expected, int newval);
 // adding the new elment to the tail of the list
 void List_insert(struct proc *proc_list_head, int index_of_process_to_add, struct spinlock *list_lock)
 {
+
   acquire(list_lock);
   bool empty_list_flag = false;
 
@@ -227,12 +228,13 @@ myproc(void)
 
 int allocpid()
 {
+  
   int pid;
   do
   {
     pid = nextpid;
   } while (!cas(&nextpid, pid, pid + 1));
-  return pid + 1;
+  return pid;
 }
 
 // Look in the process table for an UNUSED proc.
@@ -262,6 +264,7 @@ allocproc(void)
   //----------------------------------
 found:
   p->pid = allocpid();
+
   p->state = USED;
   p->next_pid = -1;
   p->process_cpu_index = cpuid();
@@ -378,8 +381,11 @@ uchar initcode[] = {
 void userinit(void)
 {
   struct proc *p;
+  
 
   p = allocproc();
+ // printf("yo2\n");
+
   initproc = p;
   struct cpu *c = mycpu();
 
