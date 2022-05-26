@@ -197,8 +197,10 @@ void procinit(void)
 {
   struct proc *p;
   int index_for_proecess = 0;
+
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+  
   acquire(&UNUSED_list_head_lock);
   for (p = proc; p < &proc[NPROC]; p++)
   {
