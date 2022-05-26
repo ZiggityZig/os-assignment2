@@ -54,23 +54,19 @@ void List_insert(int *list_head_index, int index_of_process_to_add, struct spinl
 {
 
   acquire(list_lock);
-  bool empty_list_flag = false;
 
   struct proc *process_to_add = &proc[index_of_process_to_add];
-  if (*list_head_index == -1)//the list is empty
+  // edge case: handle empty list 
+  if (*list_head_index == -1)
   {
     *list_head_index = process_to_add->index_in_proc_array;
     process_to_add->next_pid = -1;
-    empty_list_flag = true;
-  }
-  release(list_lock);
-  if (empty_list_flag)
-  {
+    release(list_lock);
     return;
   }
+  release(list_lock);
 
   struct proc *p = &proc[*list_head_index];
-  // p = &proc[proc_list_head->pid];
   acquire(&p->lock_for_list_operations);
   while (p->next_pid != -1)
   {
@@ -86,7 +82,8 @@ void List_insert(int *list_head_index, int index_of_process_to_add, struct spinl
 bool List_remove(int *list_head_index, int index_of_proc_to_remove, struct spinlock *list_lock)
 {
   acquire(list_lock);
-  if (*list_head_index == -1) // empty list
+  // edge case: handle empty list 
+  if (*list_head_index == -1)
   {
     release(list_lock);
     return false;
@@ -100,8 +97,6 @@ bool List_remove(int *list_head_index, int index_of_proc_to_remove, struct spinl
   {
 
     p = &proc[*list_head_index];
-    // p = &proc[list_head->pid];
-
     acquire(&p->lock_for_list_operations);
     *list_head_index = p->next_pid;
     release(&p->lock_for_list_operations);
@@ -417,7 +412,7 @@ struct cpu *loop_var;
 
   // allocate one user page and copy init's instructions
   // and data into it.
-  uvminit(p->pagetable, initcode, sizeof(initcode));
+  uvmin_admittedit(p->pagetable, initcode, sizeof(initcode));
   p->sz = PGSIZE;
 
   // prepare for the very first "return" from kernel to user.
@@ -502,36 +497,33 @@ int fork(void)
 
   acquire(&wait_lock);
   //-------------------------------------------------
-  int cpu_idindex = p->process_cpu_index;
+  int cpu_to_set_index = p->process_cpu_index;
   if (blnc_flag)
   { 
-    
-    int min = cpus[0].admitted_counter;
-    int index = 0;
-    int loop_var = 1;
-    while (loop_var < number_of_cpus)
+    int min_admitted = cpus[0].admitted_counter;
+    int min_admitted_cpu_index = 0;
+    int index = 1;
+    while (index < number_of_cpus)
     {
-      if (min > cpus[loop_var].admitted_counter)
+      if (min_admitted > cpus[index].admitted_counter)
       {
-        index = loop_var;
-        min = cpus[loop_var].admitted_counter;
+        min_admitted_cpu_index = index;
+        min_admitted = cpus[index].admitted_counter;
       }
-      loop_var++;
+      index++;
     }
-
-    cpu_idindex = index;
+    cpu_to_set_index = min_admitted_cpu_index;
   }
-  while (!cas(&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter + 1) == 0)
+  while (!cas(&cpus[cpu_to_set_index].admitted_counter, *&cpus[cpu_to_set_index].admitted_counter, *&cpus[cpu_to_set_index].admitted_counter + 1) == 0)
     ;
   //-------------------------------------------------
-  np->process_cpu_index = cpu_idindex;
+  np->process_cpu_index = cpu_to_set_index;
   np->parent = p;
   release(&wait_lock);
   //-------------------------problems from here
   acquire(&np->lock);
   np->state = RUNNABLE;
 
-  // int *pointer_to_process_cpuIndex = &cpus[p->process_cpu_index].RUNNABLE_list_head_pid;
   struct cpu *process_cpu = &cpus[p->process_cpu_index];
 
   List_insert(&process_cpu->RUNNABLE_list_head_pid, np->index_in_proc_array, &process_cpu->CPU_proc_list_lock);
@@ -694,7 +686,7 @@ void scheduler(void)
 
       swtch(&c->context, &p->context);
       // Process is done running for now.
-      // It should have changed its p->state before coming back.
+      // It should have changed its p->state before comin_admittedg back.
       c->proc = 0;
       release(&p->lock);
     }
@@ -829,35 +821,30 @@ void wakeup(void *chan)
       {
         loop_var->state = RUNNABLE;
         //--------------------------------------------
-        int cpu_idindex = loop_var->process_cpu_index;
+        int cpu_to_set_index = p->process_cpu_index;
         if (blnc_flag)
-        { // choose different cpu
-          int index = 0;
-          int min = cpus[0].admitted_counter;
-          int i = 1;
-          while (i < number_of_cpus)
-          {
-            if (min > cpus[i].admitted_counter)
+          { 
+          int min_admitted = cpus[0].admitted_counter;
+          int min_admitted_cpu_index = 0;
+          int index = 1;
+          while (index < number_of_cpus)
             {
-              index = i;
-              min = cpus[i].admitted_counter;
+              if (min_admitted > cpus[index].admitted_counter)
+              {
+                min_admitted_cpu_index = index;
+                min_admitted = cpus[index].admitted_counter;
+              }
+              index++;
             }
-            i++;
+            cpu_to_set_index = min_admitted_cpu_index;
           }
-          cpu_idindex = index;
-        }
-        if (cpu_idindex != loop_var->process_cpu_index)
+        if (cpu_to_set_index != loop_var->process_cpu_index)
         {
-          while (!cas(&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter + 1) == 0);
+          while (!cas(&cpus[cpu_to_set_index].admitted_counter, *&cpus[cpu_to_set_index].admitted_counter, *&cpus[cpu_to_set_index].admitted_counter + 1) == 0);
         }
-
         //--------------------------------------------
-        loop_var->process_cpu_index = cpu_idindex;
-        // loop_var->process_cpu_index = set_process_to_correct_cpu(loop_var->process_cpu_index, false);
+        loop_var->process_cpu_index = cpu_to_set_index;
         c = &cpus[loop_var->process_cpu_index];
-
-        // int *process_cpuIndex = &cpus[loop_var->process_cpu_index].RUNNABLE_list_head_pid;
-        // struct cpu *process_cpu = &cpus[loop_var->process_cpu_index];
         List_insert(&c->RUNNABLE_list_head_pid, current_id, &c->CPU_proc_list_lock);
       }
     }
