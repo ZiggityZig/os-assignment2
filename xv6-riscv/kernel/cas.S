@@ -9,8 +9,8 @@
      lr.w t0, (a0)         # load original value
      bne t0, a1, fail      # doesn't match' so fail
      sc.w t0, a2, (a0)     # try update
-    # bnez t0, cas          # retry if store-conditional fail
-    # li a0, 0              # set return to success
+ bnez t0, cas          # retry if store-conditional fail
+     li a0, 0              # set return to success
      jr ra                 # return  
  fail: 
      li a0, 1              # set return to failure

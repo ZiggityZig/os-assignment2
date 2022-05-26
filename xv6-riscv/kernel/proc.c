@@ -151,7 +151,7 @@ int set_CPU(int cpu_num)
   yield();
   return cpu_num;
 }
-//initate the cpu's list
+// initate the cpu's list
 void init_CPU_RUNNABLE_list()
 {
   struct cpu *loop_var;
@@ -192,7 +192,7 @@ void procinit(void)
     initlock(&p->lock, "proc");
     initlock(&p->lock_for_list_operations, "lock_for_list_operations");
     p->next_pid = index_for_proecess + 1;
-    if (index_for_proecess == NPROC - 1)
+    if (index_for_proecess == NPROC - 1) // max num od processs
     {
       p->next_pid = -1;
     }
@@ -236,12 +236,13 @@ myproc(void)
 
 int allocpid()
 {
-
+  //printf("yo1\n");
   int pid;
   do
   {
     pid = nextpid;
-  } while (!cas(&nextpid, pid, pid + 1));
+  } while (cas(&nextpid, pid, pid + 1));
+  //printf("yo2\n");
   return pid;
 }
 
@@ -254,7 +255,7 @@ allocproc(void)
 {
   struct proc *p;
   //----------------------------------
-  int index = 0;
+  //int index = 0;
   for (p = proc; p < &proc[NPROC]; p++)
   {
     acquire(&p->lock);
@@ -266,19 +267,19 @@ allocproc(void)
     {
       release(&p->lock);
     }
-    index = index + 1;
+    //index = index + 1;
   }
   return 0;
   //----------------------------------
 found:
   p->pid = allocpid();
-
   p->state = USED;
   p->next_pid = -1;
   p->process_cpu_index = cpuid();
-  p->pid = index;
+  // p->pid = index;
+printf("1. p->pid is: %d\n",p->pid);
   List_remove(&proc[UNUSED_list_head], p->pid, &UNUSED_list_head_lock);
-
+printf("2. p->pid is: %d\n",p->pid);
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0)
   {
@@ -286,7 +287,6 @@ found:
     release(&p->lock);
     return 0;
   }
-
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
   if (p->pagetable == 0)
@@ -295,13 +295,11 @@ found:
     release(&p->lock);
     return 0;
   }
-
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
   return p;
 }
 
@@ -388,12 +386,14 @@ uchar initcode[] = {
 // Set up first user process.
 void userinit(void)
 {
+
   struct proc *p;
 
   p = allocproc();
-  // printf("yo2\n");
+   
 
   initproc = p;
+
   struct cpu *c = mycpu();
 
   // allocate one user page and copy init's instructions
@@ -410,7 +410,9 @@ void userinit(void)
 
   p->state = RUNNABLE;
 
-  List_insert(&proc[c->RUNNABLE_list_head_pid], p->pid, &c->CPU_proc_list_lock); // admit the init process to the first CPU's list
+  int CPU_runnable_list_head_index_in_proc_array = c->RUNNABLE_list_head_pid;
+  List_insert(&proc[CPU_runnable_list_head_index_in_proc_array], p->pid, &c->CPU_proc_list_lock); // admit the init process to the first CPU's list
+
   release(&p->lock);
 }
 
@@ -441,6 +443,7 @@ int growproc(int n)
 // Sets up child kernel stack to return as if from fork() system call.
 int fork(void)
 {
+  printf("yo1\n");
   int i, pid;
   struct proc *np; // new process
   struct proc *p = myproc();
@@ -482,7 +485,7 @@ int fork(void)
   np->process_cpu_index = p->process_cpu_index;
   np->parent = p;
   release(&wait_lock);
-
+  //-------------------------problems from here
   acquire(&np->lock);
   np->state = RUNNABLE;
   int process_cpuIndex = cpus[p->process_cpu_index].RUNNABLE_list_head_pid;
@@ -625,13 +628,16 @@ void scheduler(void)
   struct cpu *c = mycpu();
 
   c->proc = 0;
+
   for (;;)
   {
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
     // loop_var = &proc[c->RUNNABLE_list_head_pid];
+
     while (c->RUNNABLE_list_head_pid != -1) // i changed the loop to iterate over CPU's list
     {
+      printf("c->RUNNABLE_list_head_pid = %d\n", c->RUNNABLE_list_head_pid);
       p = &proc[c->RUNNABLE_list_head_pid];
       acquire(&p->lock);
       // if (p->state == RUNNABLE)
@@ -639,9 +645,11 @@ void scheduler(void)
       //  Switch to chosen process.  It is the process's job
       //  to release its lock and then reacquire it
       //  before jumping back to us.
+
       List_remove(&proc[c->RUNNABLE_list_head_pid], p->pid, &c->CPU_proc_list_lock);
       p->state = RUNNING;
       c->proc = p;
+
       swtch(&c->context, &p->context);
       // Process is done running for now.
       // It should have changed its p->state before coming back.
