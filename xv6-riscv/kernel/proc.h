@@ -99,6 +99,7 @@ struct proc {
   int num_of_CPU;              // number of CPU the process affiliated with
   struct spinlock lock_for_list_operations;
   int process_cpu_index;             // the cpu running this process
+  int index_in_proc_array;
 
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process
