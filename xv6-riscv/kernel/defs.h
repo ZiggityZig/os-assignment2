@@ -10,6 +10,7 @@ struct stat;
 struct superblock;
 
 // bio.c
+void            init_CPU_RUNNABLE_list();
 void            binit(void);
 struct buf*     bread(uint, uint);
 void            brelse(struct buf*);

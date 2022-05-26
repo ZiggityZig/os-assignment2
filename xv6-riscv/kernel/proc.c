@@ -151,7 +151,15 @@ int set_CPU(int cpu_num)
   yield();
   return cpu_num;
 }
-
+//initate the cpu's list
+void init_CPU_RUNNABLE_list()
+{
+  struct cpu *loop_var;
+  for (loop_var = cpus; loop_var < &cpus[NCPU]; loop_var++)
+  {
+    loop_var->RUNNABLE_list_head_pid = -1;
+  }
+}
 //-----------------------------------------------------------------------------
 
 // Allocate a page for each process's kernel stack.
@@ -228,7 +236,7 @@ myproc(void)
 
 int allocpid()
 {
-  
+
   int pid;
   do
   {
@@ -381,10 +389,9 @@ uchar initcode[] = {
 void userinit(void)
 {
   struct proc *p;
-  
 
   p = allocproc();
- // printf("yo2\n");
+  // printf("yo2\n");
 
   initproc = p;
   struct cpu *c = mycpu();
@@ -635,39 +642,12 @@ void scheduler(void)
       List_remove(&proc[c->RUNNABLE_list_head_pid], p->pid, &c->CPU_proc_list_lock);
       p->state = RUNNING;
       c->proc = p;
-
       swtch(&c->context, &p->context);
-
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
       release(&p->lock);
     }
-
-    // loop_var = &proc[loop_var->next_pid];
-    //}
-    /*
-     //-------------------------------------------------
-     for (p = proc; p < &proc[NPROC]; p++)
-     {
-       acquire(&p->lock);
-       if (p->state == RUNNABLE)
-       {
-         // Switch to chosen process.  It is the process's job
-         // to release its lock and then reacquire it
-         // before jumping back to us.
-         p->state = RUNNING;
-         c->proc = p;
-         swtch(&c->context, &p->context);
-
-         // Process is done running for now.
-         // It should have changed its p->state before coming back.
-         c->proc = 0;
-       }
-       release(&p->lock);
-     }
-     //-------------------------------------------------
-     */
   }
 }
 
