@@ -20,6 +20,7 @@ struct context {
 
 // Per-CPU state.
 struct cpu {
+  struct spinlock CPU_proc_list_lock;
   struct proc *proc;            // The process running on this cpu, or null.
   struct context context;       // swtch() here to enter scheduler().
   int noff;                     // Depth of push_off() nesting.
@@ -96,6 +97,8 @@ struct proc {
   int pid;                     // Process ID
   int next_pid;                // pointer to the next procces, i added
   int num_of_CPU;              // number of CPU the process affiliated with
+  struct spinlock lock_for_list_operations;
+  int process_cpu_index;             // the cpu running this process
 
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process

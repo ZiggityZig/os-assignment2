@@ -9,9 +9,12 @@
 
 uint64 MAX_UINT64 = 94467440737095515;
 
-int UNUSED_list_head;
-int SLEEPING_list_head;
-int ZOMBIE_list_head;
+int UNUSED_list_head = -1;
+int SLEEPING_list_head = -1;
+int ZOMBIE_list_head = -1;
+struct spinlock UNUSED_list_head_lock;
+struct spinlock SLEEPING_list_head_lock;
+struct spinlock ZOMBIE_list_head_lock;
 
 struct cpu cpus[NCPU];
 
@@ -37,101 +40,116 @@ extern uint64 cas(volatile void *addr, int expected, int newval);
 
 //-----------------------------------------------------------------------------
 // adding the new elment to the tail of the list
-void List_insert(struct proc *current_proc_list, int key_to_add)
+void List_insert(struct proc *proc_list_head, int index_of_process_to_add, struct spinlock *list_lock)
 {
+  acquire(list_lock);
+  bool empty_list_flag = false;
+
+  struct proc *process_to_add = &proc[index_of_process_to_add];
+  if (proc_list_head->pid == -1)
+  {
+    proc_list_head = process_to_add;
+    process_to_add->next_pid = -1;
+    empty_list_flag = true;
+  }
+  release(list_lock);
+  if (empty_list_flag)
+  {
+    return;
+  }
+
+  struct proc *p = proc_list_head;
+  // p = &proc[proc_list_head->pid];
+  acquire(&p->lock_for_list_operations);
+  while (p->next_pid != -1)
+  {
+    release(&p->lock_for_list_operations);
+    p = &proc[p->next_pid];
+    acquire(&p->lock_for_list_operations);
+  }
+  p->next_pid = index_of_process_to_add;
+  process_to_add->next_pid = -1;
+  release(&p->lock_for_list_operations);
+}
+
+bool List_remove(struct proc *list_head, int index_of_proc_to_remove, struct spinlock *list_lock)
+{
+  acquire(list_lock);
+  if (list_head->pid == -1)
+  {
+    release(list_lock);
+    return false;
+  }
+  release(list_lock);
 
   struct proc *p;
-  acquire(&current_proc_list->lock);
-  p = &proc[key_to_add];
-  acquire(&p->lock);
-  if (&current_proc_list->next_pid == 0)
+
+  acquire(list_lock);
+  if (list_head->pid == index_of_proc_to_remove)
   {
-    current_proc_list->next_pid = p->pid;
-<<<<<<< HEAD
+    p = list_head;
+    // p = &proc[list_head->pid];
+    acquire(&p->lock_for_list_operations);
+    list_head->pid = p->next_pid;
+    release(&p->lock_for_list_operations);
+
+    release(list_lock);
+    return true;
+  }
+  release(list_lock);
+
+  bool proc_not_in_the_list = false;
+
+  struct proc *prev = &proc[list_head->pid];
+  acquire(&prev->lock_for_list_operations);
+  p = &proc[prev->next_pid];
+  acquire(&p->lock_for_list_operations);
+
+  bool stop = false;
+  while (!stop)
+  {
+
+    if (prev->next_pid == -1)
+    {
+      stop = true;
+      proc_not_in_the_list = true;
+      continue;
+    }
+
+    if (p->pid == index_of_proc_to_remove)
+    {
+      stop = true;
+      prev->next_pid = p->next_pid;
+      continue;
+    }
+    release(&prev->lock_for_list_operations);
+
+    prev = p;
+    p = &proc[p->next_pid];
+    acquire(&p->lock_for_list_operations);
+  }
+  release(&prev->lock_for_list_operations);
+  release(&p->lock_for_list_operations);
+  if (proc_not_in_the_list)
+  {
+    return false;
   }
   else
   {
-    ;
-=======
-  } else {
->>>>>>> 412aeb31b750644a69c750e1b0b3ff4b83cd2ce4
-    struct proc *current_proc = current_proc_list;
-    while (current_proc->next_pid != 0)
-    {
-      current_proc = &proc[current_proc->pid];
-    }
-    acquire(&current_proc->lock);
-    current_proc->next_pid = p->pid;
-    release(&current_proc->lock);
-  }
-  release(&p->lock);
-  release(&current_proc_list->lock);
-}
-
-bool List_remove(struct proc *list_head, int proc_index_to_remove)
-{
-  /* lock sentinel node */
-  struct proc *prev = list_head;
-  acquire(&prev->lock);
-
-  if (prev->next_pid == 0)
-  { /* the list is empty */
-    freeproc(prev);
-    release(&prev->lock);
     return true;
   }
-
-  struct proc *elem = &proc[prev->next_pid];
-  acquire(&elem->lock);
-
-  while (1)
-  {
-    if (elem->pid == proc_index_to_remove)
-    {
-      /* if found, assign prev next to elem next */
-      prev->next_pid = elem->next_pid;
-
-      /* unlock */
-      freeproc(elem);
-      release(&elem->lock);
-
-      /* success */
-      release(&prev->lock);
-      return true;
-    }
-    release(&prev->lock); // i am still holding the "elem" lock
-    prev = elem;
-    int next_proc = elem->next_pid;
-    if (next_proc == 0) // the element is not in the list
-    {
-      return false;
-      release(&elem->lock);
-    }
-    release(&elem->lock);
-    elem = &proc[next_proc];
-    acquire(&prev->lock);
-    acquire(&elem->lock);
-  }
-
-  /*
-  we did not find it; unlock and report failure
-  release(&elem->lock);
-  release(&prev->lock);
-  return false;
-  */
 }
 
-// int set_CPU(int cpu_num)
-// {
-//   struct cpu *c = &cpus[cpu_num]; // 'c' is the cpu we want to handle the current process
-//   struct proc *p = myproc();      // 'p' is the current process
-//   int index_of_process_to_add = p->pid;
-//   struct proc *list_head_of_cpu = &proc[c->RUNNABLE_list_head_pid]; // the list of processes to run in this cpu
-//   List_insert(list_head_of_cpu, index_of_process_to_add);
-
-//   struct proc *list_to_remove_from = &proc[mycpu()->RUNNABLE_list_head_pid];
-//   List_remove(list_to_remove_from, index_of_process_to_add);
-// }
+int set_CPU(int cpu_num)
+{
+  struct proc *p = myproc();
+  if (!cas(&p->process_cpu_index, p->process_cpu_index, cpu_num))
+  {
+    return -1;
+  }
+  yield();
+  return cpu_num;
+}
 
 //-----------------------------------------------------------------------------
 
@@ -156,15 +174,25 @@ void proc_mapstacks(pagetable_t kpgtbl)
 void procinit(void)
 {
   struct proc *p;
-
+  int index_for_proecess = 0;
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+  acquire(&UNUSED_list_head_lock);
   for (p = proc; p < &proc[NPROC]; p++)
   {
     initlock(&p->lock, "proc");
+    initlock(&p->lock_for_list_operations, "lock_for_list_operations");
+    p->next_pid = index_for_proecess + 1;
+    if (index_for_proecess == NPROC - 1)
+    {
+      p->next_pid = -1;
+    }
+
     p->kstack = KSTACK((int)(p - proc));
-    List_insert(&proc[UNUSED_list_head], p->pid); //---------------i added
+    index_for_proecess = index_for_proecess + 1;
   }
+  UNUSED_list_head = 0;
+  release(&UNUSED_list_head_lock);
 }
 
 // Must be called with interrupts disabled,
@@ -216,24 +244,7 @@ allocproc(void)
 {
   struct proc *p;
   //----------------------------------
-  p = &proc[UNUSED_list_head];
-  while (p->pid > 0)
-  {
-    acquire(&p->lock);
-    if (p->state == UNUSED)
-    {
-      goto found;
-    }
-    else
-    {
-      release(&p->lock);
-    }
-    p = &proc[p->next_pid];
-  }
-  return 0;
-  //----------------------------------
-
-/*
+  int index = 0;
   for (p = proc; p < &proc[NPROC]; p++)
   {
     acquire(&p->lock);
@@ -245,12 +256,17 @@ allocproc(void)
     {
       release(&p->lock);
     }
+    index = index + 1;
   }
   return 0;
-*/
+  //----------------------------------
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->next_pid = -1;
+  p->process_cpu_index = cpuid();
+  p->pid = index;
+  List_remove(&proc[UNUSED_list_head], p->pid, &UNUSED_list_head_lock);
 
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0)
@@ -289,6 +305,7 @@ freeproc(struct proc *p)
   p->trapframe = 0;
   if (p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
+  List_remove(&proc[ZOMBIE_list_head], p->pid, &ZOMBIE_list_head_lock);
   p->pagetable = 0;
   p->sz = 0;
   p->pid = 0;
@@ -298,14 +315,8 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
-  p->next_pid = 0;
-  p->num_of_CPU = 0;
-  //------------------------- i added--------------
-  release(&p->lock);
-  List_remove(&proc[ZOMBIE_list_head], p->pid);
-  List_insert(&proc[UNUSED_list_head], p->pid);
-  acquire(&p->lock);
-  //-----------------------------------------------
+
+  List_insert(&proc[UNUSED_list_head], p->pid, &UNUSED_list_head_lock);
 }
 
 // Create a user page table for a given process,
@@ -386,8 +397,8 @@ void userinit(void)
 
   p->state = RUNNABLE;
 
+  List_insert(&proc[c->RUNNABLE_list_head_pid], p->pid, &c->CPU_proc_list_lock); // admit the init process to the first CPU's list
   release(&p->lock);
-  List_insert(&proc[c->RUNNABLE_list_head_pid], p->pid); // admit the init process to the firxt CPU's list
 }
 
 // Grow or shrink user memory by n bytes.
@@ -455,33 +466,17 @@ int fork(void)
   release(&np->lock);
 
   acquire(&wait_lock);
+  np->process_cpu_index = p->process_cpu_index;
   np->parent = p;
   release(&wait_lock);
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  int process_cpuIndex = cpus[p->process_cpu_index].RUNNABLE_list_head_pid;
+  struct cpu *process_cpu = &cpus[p->process_cpu_index];
+
+  List_insert(&proc[process_cpuIndex], np->pid, &process_cpu->CPU_proc_list_lock);
   release(&np->lock);
-  //-----i added-----
-  struct cpu *min_admittion_cpu = &cpus[0];
-  struct cpu *current_cpu;
-  uint64 min_admittion = MAX_UINT64;
-  for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++)
-  {
-    if (current_cpu->admitted_counter < min_admittion)
-    {
-      min_admittion = current_cpu->admitted_counter;
-      min_admittion_cpu = current_cpu;
-    }
-  }
-  acquire(&np->lock);
-  List_insert(&proc[min_admittion_cpu->RUNNABLE_list_head_pid], np->pid); // admit the new process to the father's current CPU's ready list
-  uint64 old;
-  do
-  {
-    old = min_admittion_cpu->admitted_counter;
-  } while (cas(&min_admittion_cpu->admitted_counter, old, old + 1));
-  release(&np->lock);
-  //-----until here---
   return pid;
 }
 
@@ -540,7 +535,7 @@ void exit(int status)
   p->xstate = status;
   p->state = ZOMBIE;
   //---i added
-  List_insert(&proc[ZOMBIE_list_head], p->pid);
+  List_insert(&proc[ZOMBIE_list_head], p->pid, &ZOMBIE_list_head_lock);
   //----------
   release(&wait_lock);
 
@@ -613,7 +608,7 @@ int wait(uint64 addr)
 void scheduler(void)
 {
   struct proc *p;
-  struct proc *loop_var;
+  // struct proc *loop_var;
   struct cpu *c = mycpu();
 
   c->proc = 0;
@@ -621,30 +616,30 @@ void scheduler(void)
   {
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
-    loop_var = &proc[c->RUNNABLE_list_head_pid];
-    while (loop_var->pid > 0) // i changed the loop to iterate over CPU's list
+    // loop_var = &proc[c->RUNNABLE_list_head_pid];
+    while (c->RUNNABLE_list_head_pid != -1) // i changed the loop to iterate over CPU's list
     {
       p = &proc[c->RUNNABLE_list_head_pid];
       acquire(&p->lock);
-      if (p->state == RUNNABLE)
-      {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
+      // if (p->state == RUNNABLE)
+      //{
+      //  Switch to chosen process.  It is the process's job
+      //  to release its lock and then reacquire it
+      //  before jumping back to us.
+      List_remove(&proc[c->RUNNABLE_list_head_pid], p->pid, &c->CPU_proc_list_lock);
+      p->state = RUNNING;
+      c->proc = p;
 
-        List_remove(&proc[c->RUNNABLE_list_head_pid], p->pid);
+      swtch(&c->context, &p->context);
 
-        swtch(&c->context, &p->context);
-
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-      }
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
       release(&p->lock);
-      loop_var = &proc[loop_var->next_pid];
     }
+
+    // loop_var = &proc[loop_var->next_pid];
+    //}
     /*
      //-------------------------------------------------
      for (p = proc; p < &proc[NPROC]; p++)
@@ -704,7 +699,7 @@ void yield(void)
   struct proc *p = myproc();
   acquire(&p->lock);
   p->state = RUNNABLE;
-  List_insert(&proc[c->RUNNABLE_list_head_pid], p->pid);
+  List_insert(&proc[c->RUNNABLE_list_head_pid], p->pid, &c->CPU_proc_list_lock);
 
   sched();
   release(&p->lock);
@@ -745,16 +740,16 @@ void sleep(void *chan, struct spinlock *lk)
   // so it's okay to release lk.
 
   acquire(&p->lock); // DOC: sleeplock1
+  //----i added----------------------------------
+  List_insert(&proc[SLEEPING_list_head], p->pid, &SLEEPING_list_head_lock);
+  //---------------------------------------------
+
   release(lk);
 
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
-  release(&p->lock); //------i added
-  //----i added----------------------------------
-  List_insert(&proc[SLEEPING_list_head], p->pid);
-  //---------------------------------------------
-  acquire(&p->lock);//------i added
+
   sched();
 
   // Tidy up.
@@ -769,53 +764,40 @@ void sleep(void *chan, struct spinlock *lk)
 // Must be called without any p->lock.
 void wakeup(void *chan)
 {
+  // no sleeping process
+  acquire(&SLEEPING_list_head_lock);
+  if (SLEEPING_list_head == -1)
+  {
+    release(&SLEEPING_list_head_lock);
+    return;
+  }
+  // struct cpu *c;
   struct proc *loop_var;
   loop_var = &proc[SLEEPING_list_head];
-  while (loop_var->pid > 0)
+  release(&SLEEPING_list_head_lock);
+  acquire(&loop_var->lock_for_list_operations);
+  int current_id = loop_var->pid;
+
+  bool removed = false;
+  release(&loop_var->lock_for_list_operations);
+
+  while (current_id != -1)
   {
-    if (loop_var != myproc())
+    loop_var = &proc[current_id];
+    acquire(&loop_var->lock);
+    if (loop_var->state == SLEEPING && loop_var->chan == chan)
     {
-      acquire(&loop_var->lock);
-      if (loop_var->state == SLEEPING && loop_var->chan == chan)
+      removed = List_remove(&proc[SLEEPING_list_head], current_id, &SLEEPING_list_head_lock);
+      if (removed)
       {
         loop_var->state = RUNNABLE;
+        int process_cpuIndex = cpus[loop_var->process_cpu_index].RUNNABLE_list_head_pid;
+        struct cpu *process_cpu = &cpus[loop_var->process_cpu_index];
+        List_insert(&proc[process_cpuIndex], loop_var->pid, &process_cpu->CPU_proc_list_lock);
       }
-      release(&loop_var->lock);
-      struct cpu *min_admittion_cpu = &cpus[0];
-      struct cpu *current_cpu;
-      uint64 min_admittion = MAX_UINT64;
-      for (current_cpu = cpus; current_cpu < &cpus[NCPU]; current_cpu++)
-      {
-        if (current_cpu->admitted_counter < min_admittion)
-        {
-          min_admittion = current_cpu->admitted_counter;
-          min_admittion_cpu = current_cpu;
-        }
-      }
-      List_remove(&proc[SLEEPING_list_head], loop_var->pid);
-      List_insert(&proc[min_admittion_cpu->RUNNABLE_list_head_pid], loop_var->pid);
-      uint64 old;
-      do
-      {
-        old = min_admittion_cpu->admitted_counter;
-      } while (cas(&min_admittion_cpu->admitted_counter, old, old + 1));
-      loop_var = &proc[loop_var->next_pid];
     }
+    current_id = loop_var->next_pid;
   }
-  /*
-    for (p = proc; p < &proc[NPROC]; p++)
-    {
-      if (p != myproc())
-      {
-        acquire(&p->lock);
-        if (p->state == SLEEPING && p->chan == chan)
-        {
-          p->state = RUNNABLE;
-        }
-        release(&p->lock);
-      }
-    }
-    */
 }
 
 // Kill the process with the given pid.
@@ -824,6 +806,7 @@ void wakeup(void *chan)
 int kill(int pid)
 {
   struct proc *p;
+  bool removed_proc = false;
 
   for (p = proc; p < &proc[NPROC]; p++)
   {
@@ -831,10 +814,16 @@ int kill(int pid)
     if (p->pid == pid)
     {
       p->killed = 1;
-      if (p->state == SLEEPING)
+      if (p->state == SLEEPING) // Wake process from sleep().
       {
-        // Wake process from sleep().
-        p->state = RUNNABLE;
+        removed_proc = List_remove(&proc[SLEEPING_list_head], p->pid, &SLEEPING_list_head_lock);
+        if (removed_proc)
+        {
+          p->state = RUNNABLE;
+          // struct cpu *c = &cpus[p->cpu];
+          struct cpu *c = mycpu();
+          List_insert(&proc[c->RUNNABLE_list_head_pid], p->pid, &c->CPU_proc_list_lock);
+        }
       }
       release(&p->lock);
       return 0;
