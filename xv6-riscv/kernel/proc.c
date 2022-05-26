@@ -399,6 +399,14 @@ uchar initcode[] = {
 void userinit(void)
 {
 
+  //-----------------------------------------------------------
+struct cpu *loop_var;
+// cpu's init
+  for (loop_var = cpus; loop_var < &cpus[NCPU]; loop_var++)
+  {
+    loop_var->RUNNABLE_list_head_pid = -1;
+  }
+  //-----------------------------------------------------------
   struct proc *p;
   p = allocproc();
   initproc = p;
@@ -494,9 +502,10 @@ int fork(void)
   //-------------------------------------------------
   int cpu_idindex = p->process_cpu_index;
   if (blnc)
-  { // choose different cpu
-    int index = 0;
+  { 
+    
     int min = cpus[0].admitted_counter;
+    int index = 0;
     int loop_var = 1;
     while (loop_var < number_of_cpus)
     {
@@ -510,11 +519,8 @@ int fork(void)
 
     cpu_idindex = index;
   }
-  // if (cpu_idindex != p->process_cpu_index)
-  //{
   while (!cas(&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter + 1) == 0)
     ;
-  // }
   //-------------------------------------------------
   np->process_cpu_index = cpu_idindex;
   np->parent = p;

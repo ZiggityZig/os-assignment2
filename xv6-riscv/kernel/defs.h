@@ -82,7 +82,6 @@ void            panic(char*) __attribute__((noreturn));
 void            printfinit(void);
 
 // proc.c
-void            init_CPU_RUNNABLE_list();
 int             cpuid(void);
 void            exit(int);
 int             fork(void);
