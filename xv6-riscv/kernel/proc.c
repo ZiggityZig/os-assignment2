@@ -10,20 +10,15 @@
 //-----------------------------------------------------
 
 #ifdef ON
-int blnc = 1;
+int blnc_flag = 1;
 #else
-int blnc = 0;
+int blnc_flag = 0;
 #endif
 
 //-----------------------------------------------------
 uint64 MAX_UINT64 = 94467440737095515;
 
-int UNUSED_list_head = -1;
-int SLEEPING_list_head = -1;
-int ZOMBIE_list_head = -1;
-struct spinlock UNUSED_list_head_lock;
-struct spinlock SLEEPING_list_head_lock;
-struct spinlock ZOMBIE_list_head_lock;
+
 
 int number_of_cpus;
 struct cpu cpus[NCPU];
@@ -47,7 +42,12 @@ extern char trampoline[]; // trampoline.S
 struct spinlock wait_lock;
 
 extern uint64 cas(volatile void *addr, int expected, int newval);
-
+int UNUSED_list_head = -1;
+int SLEEPING_list_head = -1;
+int ZOMBIE_list_head = -1;
+struct spinlock UNUSED_list_head_lock;
+struct spinlock SLEEPING_list_head_lock;
+struct spinlock ZOMBIE_list_head_lock;
 //-----------------------------------------------------------------------------
 // adding the new elment to the tail of the list
 void List_insert(int *list_head_index, int index_of_process_to_add, struct spinlock *list_lock)
@@ -57,7 +57,7 @@ void List_insert(int *list_head_index, int index_of_process_to_add, struct spinl
   bool empty_list_flag = false;
 
   struct proc *process_to_add = &proc[index_of_process_to_add];
-  if (*list_head_index == -1)
+  if (*list_head_index == -1)//the list is empty
   {
     *list_head_index = process_to_add->index_in_proc_array;
     process_to_add->next_pid = -1;
@@ -399,7 +399,7 @@ uchar initcode[] = {
 void userinit(void)
 {
 
-  //-----------------------------------------------------------
+  
 struct cpu *loop_var;
 // cpu's init
   for (loop_var = cpus; loop_var < &cpus[NCPU]; loop_var++)
@@ -501,7 +501,7 @@ int fork(void)
   acquire(&wait_lock);
   //-------------------------------------------------
   int cpu_idindex = p->process_cpu_index;
-  if (blnc)
+  if (blnc_flag)
   { 
     
     int min = cpus[0].admitted_counter;
@@ -828,7 +828,7 @@ void wakeup(void *chan)
         loop_var->state = RUNNABLE;
         //--------------------------------------------
         int cpu_idindex = loop_var->process_cpu_index;
-        if (blnc)
+        if (blnc_flag)
         { // choose different cpu
           int index = 0;
           int min = cpus[0].admitted_counter;
