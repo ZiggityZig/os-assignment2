@@ -10,7 +10,7 @@
 //-----------------------------------------------------
 
 #ifdef ON
-int blnc = 1; 
+int blnc = 1;
 #else
 int blnc = 0;
 #endif
@@ -153,34 +153,7 @@ bool List_remove(int *list_head_index, int index_of_proc_to_remove, struct spinl
     return true;
   }
 }
-int set_process_to_correct_cpu(int cpuIndex, bool fork_otr_not)
-{
 
-  int cpu_idindex = cpuIndex;
-  if (blnc)
-  { // choose different cpu
-    int index = 0;
-    int min = cpus[0].admitted_counter;
-    for (int i = 1; i < number_of_cpus; i++)
-    {
-      if (min > cpus[i].admitted_counter)
-      {
-        index = i;
-        min = cpus[i].admitted_counter;
-      }
-    }
-    cpu_idindex = index;
-  }
-  if ((cpu_idindex != cpuIndex) || fork_otr_not)
-  {
-    while (!cas(&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter + 1) == 0)
-      ;
-
-    // inc_counter(&cpus[cpu_idindex].admitted_counter);
-  }
-  return cpu_idindex;
-}
-//-------------------------------------------------------------------------------------------
 int set_CPU(int cpu_num)
 {
   struct proc *p = myproc();
@@ -518,7 +491,32 @@ int fork(void)
   release(&np->lock);
 
   acquire(&wait_lock);
-  np->process_cpu_index = set_process_to_correct_cpu(p->process_cpu_index, true);
+  //-------------------------------------------------
+  int cpu_idindex = p->process_cpu_index;
+  if (blnc)
+  { // choose different cpu
+    int index = 0;
+    int min = cpus[0].admitted_counter;
+    int loop_var = 1;
+    while (loop_var < number_of_cpus)
+    {
+      if (min > cpus[loop_var].admitted_counter)
+      {
+        index = loop_var;
+        min = cpus[loop_var].admitted_counter;
+      }
+      loop_var++;
+    }
+
+    cpu_idindex = index;
+  }
+  // if (cpu_idindex != p->process_cpu_index)
+  //{
+  while (!cas(&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter + 1) == 0)
+    ;
+  // }
+  //-------------------------------------------------
+  np->process_cpu_index = cpu_idindex;
   np->parent = p;
   release(&wait_lock);
   //-------------------------problems from here
@@ -822,7 +820,32 @@ void wakeup(void *chan)
       if (removed)
       {
         loop_var->state = RUNNABLE;
-        loop_var->process_cpu_index = set_process_to_correct_cpu(loop_var->process_cpu_index, false);
+        //--------------------------------------------
+        int cpu_idindex = loop_var->process_cpu_index;
+        if (blnc)
+        { // choose different cpu
+          int index = 0;
+          int min = cpus[0].admitted_counter;
+          int i = 1;
+          while (i < number_of_cpus)
+          {
+            if (min > cpus[i].admitted_counter)
+            {
+              index = i;
+              min = cpus[i].admitted_counter;
+            }
+            i++;
+          }
+          cpu_idindex = index;
+        }
+        if (cpu_idindex != loop_var->process_cpu_index)
+        {
+          while (!cas(&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter, *&cpus[cpu_idindex].admitted_counter + 1) == 0);
+        }
+
+        //--------------------------------------------
+        loop_var->process_cpu_index = cpu_idindex;
+        // loop_var->process_cpu_index = set_process_to_correct_cpu(loop_var->process_cpu_index, false);
         c = &cpus[loop_var->process_cpu_index];
 
         // int *process_cpuIndex = &cpus[loop_var->process_cpu_index].RUNNABLE_list_head_pid;
@@ -855,7 +878,7 @@ int kill(int pid)
         if (removed_proc)
         {
           p->state = RUNNABLE;
-          
+
           struct cpu *c = &cpus[p->process_cpu_index];
           List_insert(&c->RUNNABLE_list_head_pid, p->index_in_proc_array, &c->CPU_proc_list_lock);
         }
